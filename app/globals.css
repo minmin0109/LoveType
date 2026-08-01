@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+@theme {
+  /* ตั้งค่าสีของเราตรงนี้ */
+  --color-cute-bg: #EBF5FB;
+  --color-cute-blue: #5DADE2;
+  --color-cute-dark: #2C3E50;
+  
+  /* ตั้งค่าฟอนต์ */
+  --font-mali: var(--font-mali), sans-serif;
+}
