@@ -13,7 +13,7 @@ export interface CalculatedResult {
   title: string;
   description: string;
   image?: string;
-  glowColor?: string;  
+  glowColor?: string;
   score: number;
   percentage: number;
 }
@@ -157,48 +157,60 @@ export default function Home() {
   };
 
   const saveImageAndShareIG = useCallback(async () => {
-  if (!resultCardRef.current) return;
+    if (!resultCardRef.current) return;
 
-  setIsGenerating(true);
+    setIsGenerating(true);
 
-  try {
-    await document.fonts.ready;
+    try {
+      await document.fonts.ready;
 
-    const images = Array.from(
-      resultCardRef.current.querySelectorAll("img")
-    );
+      // ค้นหารูปทั้งหมดใน Result Card แล้วใส่ crossOrigin เพื่อป้องกันปัญหา CORS
+      const images = Array.from(resultCardRef.current.querySelectorAll("img"));
 
-    await Promise.all(
-      images.map((img) => {
-        if (img.complete && img.naturalWidth > 0) {
-          return Promise.resolve();
-        }
+      await Promise.all(
+        images.map((img) => {
+          return new Promise<void>((resolve) => {
+            if (!img.crossOrigin) {
+              img.crossOrigin = "anonymous";
+            }
+            if (img.complete && img.naturalWidth > 0) {
+              resolve();
+            } else {
+              img.onload = () => resolve();
+              img.onerror = () => resolve(); // ข้ามไปก่อนถ้าโหลดไม่ได้ จะได้ไม่ค้าง
+            }
+          });
+        })
+      );
 
-        return new Promise<void>((resolve) => {
-          img.onload = () => resolve();
-          img.onerror = () => resolve();
-        });
-      })
-    );
+      // สร้างรูปภาพ PNG ด้วย html-to-image
+      const dataUrl = await toPng(resultCardRef.current, {
+        cacheBust: true,
+        pixelRatio: 3,
+        backgroundColor: "#FFF0F5",
+      });
 
-    const dataUrl = await toPng(resultCardRef.current, {
-      cacheBust: true,
-      pixelRatio: 3,
-      backgroundColor: "#FFF0F5",
-    });
+      // ตรวจสอบว่าเป็นมือถือหรือ In-app browser ที่บล็อกการดาวน์โหลดไหม
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
-    const link = document.createElement("a");
-    link.download = `my-love-type-${Date.now()}.png`;
-    link.href = dataUrl;
-    link.click();
+      if (isMobile) {
+        // เปิด Modal แสดงรูปให้ผู้ใช้กดค้างบันทึกเอง (วิธีที่ชัวร์ที่สุดบนมือถือ)
+        setShowImageModal(dataUrl);
+      } else {
+        // สำหรับ Desktop ปกติให้ดาวน์โหลดผ่าน tag a
+        const link = document.createElement("a");
+        link.download = `my-love-type-${Date.now()}.png`;
+        link.href = dataUrl;
+        link.click();
+      }
 
-  } catch (err) {
-    console.error(err);
-    alert("ไม่สามารถบันทึกรูปภาพได้");
-  } finally {
-    setIsGenerating(false);
-  }
-}, []);
+    } catch (err) {
+      console.error(err);
+      alert("ไม่สามารถบันทึกรูปภาพได้ กรุณาลองใหม่อีกครั้ง");
+    } finally {
+      setIsGenerating(false);
+    }
+  }, []);
 
   const shareFacebook = () => {
     window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(websiteUrl)}`, '_blank');
@@ -225,7 +237,7 @@ export default function Home() {
           transition={pageTransition}
           className="w-full flex flex-col items-center"
         >
-         {gameState === 'start' && (
+          {gameState === 'start' && (
             <div className="flex items-center justify-center p-4 relative overflow-hidden w-full">
               <motion.div
                 initial={{ opacity: 0, scale: 0.9, y: 10 }}
@@ -344,7 +356,7 @@ export default function Home() {
                       <p className="text-center text-sm font-bold text-[#ff748e] mb-3">
                         ออกแบบความในใจได้ทุกโอกาส
                       </p>
-                      
+
                       <div className="flex flex-wrap justify-center gap-2 mb-3">
                         {['ง้อแฟน', 'วันครบรอบ', 'สารภาพรัก', 'การ์ดวันเกิด', 'รวบรวมข้อความให้ศิลปิน', 'สมุด Friendship', 'Customize Website'].map((tag, idx) => (
                           <span key={idx} className="bg-white text-[#ff748e] text-[11px] md:text-xs font-bold px-3 py-1.5 rounded-lg border border-[#ffb6c1] shadow-sm">
@@ -355,7 +367,7 @@ export default function Home() {
 
                       <div className="text-center mt-3 border-t border-[#ffe0e8] pt-3">
                         <p className="text-[10px] md:text-xs text-gray-600 font-medium leading-relaxed mb-1">
-                          เพื่อน แฟน ครอบครัว ศิลปินที่คุณชอบ และคนสำคัญในชีวิตคุณ สามารถส่งเป็นของขวัญให้ได้ทุกโอกาส ข้อมูลทั้งหมดจะเป็นความลับ 
+                          เพื่อน แฟน ครอบครัว ศิลปินที่คุณชอบ และคนสำคัญในชีวิตคุณ สามารถส่งเป็นของขวัญให้ได้ทุกโอกาส ข้อมูลทั้งหมดจะเป็นความลับ
                         </p>
                         <p className="text-[10px] md:text-xs text-[#ff748e] font-bold">
                           สามารถเลือกแบบที่คุณชอบได้เอง Customize เฉพาะคุณ
@@ -377,10 +389,10 @@ export default function Home() {
 
                     <div className="text-left w-full rounded-2xl border border-[#ffb6c1] bg-white p-4 shadow-sm flex items-center gap-5">
                       <div className="w-16 h-16 shrink-0 rounded-xl border border-dashed border-[#ffb6c1] bg-[#fef0f3] flex items-center justify-center overflow-hidden">
-                        <img 
-                          src="/images/QRCode-line.png" 
-                          alt="Line QR Code" 
-                          className="w-full h-full object-contain p-1" 
+                        <img
+                          src="/images/QRCode-line.png"
+                          alt="Line QR Code"
+                          className="w-full h-full object-contain p-1"
                         />
                       </div>
 
@@ -403,11 +415,10 @@ export default function Home() {
                     whileHover={countdown === 0 ? { scale: 1.02 } : {}}
                     whileTap={countdown === 0 ? { scale: 0.98 } : {}}
                     onClick={handleShowResult}
-                    className={`w-full rounded-2xl py-4 text-base md:text-lg font-bold transition-all duration-300 flex items-center justify-center gap-2 ${
-                      countdown > 0
+                    className={`w-full rounded-2xl py-4 text-base md:text-lg font-bold transition-all duration-300 flex items-center justify-center gap-2 ${countdown > 0
                         ? 'bg-gray-200 text-gray-500 cursor-not-allowed border border-gray-300'
                         : 'bg-[#ff748e] text-white shadow-[0_6px_0_#d85a72] active:shadow-[0_0px_0_#d85a72] active:translate-y-[6px]'
-                    }`}
+                      }`}
                   >
                     {countdown > 0 ? `กำลังประมวลผลลัพธ์... (${countdown})` : <>ดูผลลัพธ์สเปกของคุณ</>}
                   </motion.button>
@@ -465,6 +476,7 @@ export default function Home() {
                           {/* ลบขอบสีขาวออกโดยเอา border-4 border-white ออก */}
                           <img
                             src={top1.image}
+                            crossOrigin="anonymous" // <--- เพิ่มตรงนี้
                             alt={top1.title}
                             className="relative z-10 w-64 h-64 md:w-72 md:h-72 object-cover rounded-full drop-shadow-[0_15px_30px_rgba(0,0,0,0.15)]"
                           />
@@ -502,9 +514,9 @@ export default function Home() {
                                   {runnersUp.map((res) => (
                                     <div key={res.id} className="flex flex-col items-center">
                                       {res.image ? (
-                                        /* ลบขอบสีขาวออกจากรูปรองเช่นกันโดยเอา border-2 border-white ออก */
                                         <img
                                           src={res.image}
+                                          crossOrigin="anonymous" // <--- เพิ่มตรงนี้
                                           alt={res.title}
                                           className="w-20 h-20 md:w-24 md:h-24 object-cover rounded-full mb-2 drop-shadow-sm transition-transform hover:scale-105"
                                           onError={(e) => {
@@ -536,6 +548,7 @@ export default function Home() {
                             <div className="mt-2 md:mt-3 w-full flex justify-center">
                               <img
                                 src="/images/cupidbox-logo.png"
+                                crossOrigin="anonymous"
                                 alt="Cupid Box"
                                 className="w-[120px] md:w-[200px] h-auto opacity-80 object-contain"
                               />
