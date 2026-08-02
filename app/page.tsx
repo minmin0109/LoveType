@@ -5,7 +5,7 @@ import QuizCard from '@/components/QuizCard';
 import { questionsData } from '@/data/questions';
 import { resultsData } from '@/data/results';
 import { motion, AnimatePresence } from 'framer-motion';
-import { toPng } from 'html-to-image';
+import { toJpeg } from 'html-to-image';
 import confetti from 'canvas-confetti';
 
 export interface CalculatedResult {
@@ -17,6 +17,7 @@ export interface CalculatedResult {
   score: number;
   percentage: number;
 }
+
 const pageVariants = {
   initial: { opacity: 0, scale: 0.98, y: 10 },
   animate: { opacity: 1, scale: 1, y: 0 },
@@ -164,7 +165,6 @@ export default function Home() {
     try {
       await document.fonts.ready;
 
-      // ค้นหารูปทั้งหมดใน Result Card แล้วใส่ crossOrigin เพื่อป้องกันปัญหา CORS
       const images = Array.from(resultCardRef.current.querySelectorAll("img"));
 
       await Promise.all(
@@ -177,31 +177,43 @@ export default function Home() {
               resolve();
             } else {
               img.onload = () => resolve();
-              img.onerror = () => resolve(); // ข้ามไปก่อนถ้าโหลดไม่ได้ จะได้ไม่ค้าง
+              img.onerror = () => resolve();
             }
           });
         })
       );
 
-      // สร้างรูปภาพ PNG ด้วย html-to-image
-      const dataUrl = await toPng(resultCardRef.current, {
+      try {
+        await toJpeg(resultCardRef.current, { cacheBust: true, pixelRatio: 1, quality: 0.5 });
+      } catch (err) {
+        console.warn(err);
+      }
+
+      const dataUrl = await toJpeg(resultCardRef.current, {
         cacheBust: true,
         pixelRatio: 3,
+        quality: 0.95,
         backgroundColor: "#FFF0F5",
       });
 
-      // ตรวจสอบว่าเป็นมือถือหรือ In-app browser ที่บล็อกการดาวน์โหลดไหม
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
       if (isMobile) {
-        // เปิด Modal แสดงรูปให้ผู้ใช้กดค้างบันทึกเอง (วิธีที่ชัวร์ที่สุดบนมือถือ)
         setShowImageModal(dataUrl);
       } else {
-        // สำหรับ Desktop ปกติให้ดาวน์โหลดผ่าน tag a
+        const res = await fetch(dataUrl);
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+  
         const link = document.createElement("a");
-        link.download = `my-love-type-${Date.now()}.png`;
-        link.href = dataUrl;
+        link.download = `my-love-type-${Date.now()}.jpg`;
+        link.href = blobUrl;
+        
+        document.body.appendChild(link);
         link.click();
+        
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
       }
 
     } catch (err) {
@@ -473,10 +485,9 @@ export default function Home() {
                             }}
                           />
 
-                          {/* ลบขอบสีขาวออกโดยเอา border-4 border-white ออก */}
                           <img
                             src={top1.image}
-                            crossOrigin="anonymous" // <--- เพิ่มตรงนี้
+                            crossOrigin="anonymous"
                             alt={top1.title}
                             className="relative z-10 w-64 h-64 md:w-72 md:h-72 object-cover rounded-full drop-shadow-[0_15px_30px_rgba(0,0,0,0.15)]"
                           />
@@ -516,7 +527,7 @@ export default function Home() {
                                       {res.image ? (
                                         <img
                                           src={res.image}
-                                          crossOrigin="anonymous" // <--- เพิ่มตรงนี้
+                                          crossOrigin="anonymous"
                                           alt={res.title}
                                           className="w-20 h-20 md:w-24 md:h-24 object-cover rounded-full mb-2 drop-shadow-sm transition-transform hover:scale-105"
                                           onError={(e) => {
