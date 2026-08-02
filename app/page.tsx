@@ -29,6 +29,22 @@ const pageTransition = {
   ease: [0.25, 0.8, 0.25, 1] as const,
 };
 
+// Detects "real" mobile / touch devices, including iPadOS (which reports
+// itself as "MacIntel" in the userAgent but still has touch + no reliable
+// <a download> support for blob URLs).
+function detectIsMobile() {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent;
+  const isKnownMobileUA = /iPhone|iPad|iPod|Android/i.test(ua);
+  const isIpadOsDesktopMode =
+    navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+  const isTouchOnly =
+    typeof window !== 'undefined' &&
+    'ontouchstart' in window &&
+    window.innerWidth <= 900;
+  return isKnownMobileUA || isIpadOsDesktopMode || isTouchOnly;
+}
+
 export default function Home() {
   const [gameState, setGameState] = useState<'start' | 'playing' | 'promotion' | 'result'>('start');
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -165,13 +181,13 @@ export default function Home() {
     try {
       await document.fonts.ready;
 
-      const images = Array.from(resultCardRef.current.querySelectorAll("img"));
+      const images = Array.from(resultCardRef.current.querySelectorAll('img'));
 
       await Promise.all(
         images.map((img) => {
           return new Promise<void>((resolve) => {
             if (!img.crossOrigin) {
-              img.crossOrigin = "anonymous";
+              img.crossOrigin = 'anonymous';
             }
             if (img.complete && img.naturalWidth > 0) {
               resolve();
@@ -183,39 +199,47 @@ export default function Home() {
         })
       );
 
-      const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+      // Single capture pass. The old code rendered twice (a throwaway
+      // low-quality pass "to warm up fonts/images" followed by the real
+      // pass) which roughly doubled generation time and, on slower mobile
+      // GPUs/canvases, was the main reason the button appeared to hang or
+      // silently fail. Waiting on document.fonts.ready + the image
+      // preloading above is enough on its own.
       const dataUrl = await toJpeg(resultCardRef.current, {
         cacheBust: true,
-        pixelRatio,
-        quality: 0.9,
-        backgroundColor: "#FFF0F5",
+        pixelRatio: 2, // was 3 — large canvases can silently fail on iOS Safari's canvas-size limits
+        quality: 0.92,
+        backgroundColor: '#FFF0F5',
       });
 
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      const fileName = `my-love-type-${Date.now()}.jpg`;
-      const link = document.createElement("a");
-      link.style.display = "none";
-      link.href = dataUrl;
-      link.download = fileName;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const isMobile = detectIsMobile();
 
       if (isMobile) {
+        // On mobile (especially iOS), programmatic <a download> clicks on
+        // blob URLs are unreliable — they often just open the image in a
+        // new tab instead of saving it, which looks like "nothing happens".
+        // Showing it in-page lets the user long-press to save instead.
         setShowImageModal(dataUrl);
-        try {
-          window.open(dataUrl, '_blank');
-        } catch (err) {
-          console.warn('mobile open fallback failed', err);
-        }
-      }
+      } else {
+        const res = await fetch(dataUrl);
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
 
+        const link = document.createElement('a');
+        link.download = `my-love-type-${Date.now()}.jpg`;
+        link.href = blobUrl;
+
+        document.body.appendChild(link);
+        link.click();
+
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
+      }
     } catch (err) {
       console.error(err);
-      alert("ไม่สามารถบันทึกรูปภาพได้ กรุณาลองใหม่อีกครั้ง");
+      // Fallback: if generation fails on a device we mis-detected as
+      // desktop, still let the user try again instead of leaving them stuck.
+      alert('ไม่สามารถบันทึกรูปภาพได้ กรุณาลองใหม่อีกครั้ง');
     } finally {
       setIsGenerating(false);
     }
@@ -254,15 +278,15 @@ export default function Home() {
                 transition={{ type: 'spring', bounce: 0.5 }}
                 className="bg-white/95 backdrop-blur-sm rounded-[32px] md:rounded-[40px] shadow-[0_15px_40px_rgba(255,182,193,0.3)] max-w-4xl w-full px-6 pt-10 pb-6 md:pt-16 md:pb-8 relative z-10 flex flex-col items-center border border-[#fff0f3]"
               >
-                <h2 className="text-3xl sm:text-4xl md:text-5xl text-gray-700 font-bold mb-2 md:mb-4 tracking-wide text-center">
+                <h2 className="text-3xl sm:text-3xl md:text-5xl text-gray-700 font-bold mb-2 md:mb-4 tracking-wide text-center">
                   ลึก ๆ แล้ว...
                 </h2>
 
-                <h1 className="text-5xl sm:text-6xl md:text-6xl text-gray-700 font-bold mb-8 md:mb-10 tracking-wide text-center leading-tight">
+                <h1 className="text-4xl sm:text-5xl md:text-6xl text-gray-700 font-bold mb-8 md:mb-10 tracking-wide text-center leading-tight">
                   คุณแพ้คน <span className="text-[#ff748e]">Type</span> ไหน?
                 </h1>
 
-                <div className="bg-[#fef0f3] text-[#ff748e] rounded-full px-5 py-2 md:px-8 md:py-3 flex items-center justify-center gap-2 mb-8 md:mb-12 text-sm sm:text-base md:text-xl font-medium text-center leading-relaxed w-[95%] md:w-auto">
+                <div className="bg-[#fef0f3] text-[#ff748e] rounded-full px-5 py-2 md:px-8 md:py-3 flex items-center justify-center gap-2 mb-8 md:mb-12 text-base sm:text-base md:text-xl font-medium text-center leading-relaxed w-[95%] md:w-auto">
                   <span>♥</span>
                   มาไขคำตอบเรื่องราวความรักของคุณได้ที่นี่
                   <span>♥</span>
@@ -270,28 +294,28 @@ export default function Home() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-dashed divide-gray-300 w-full mb-8 md:mb-10 px-2 md:px-8 gap-y-4 md:gap-y-0">
                   <div className="flex flex-col items-center justify-center text-center gap-1 md:gap-2 px-4 py-3 md:py-0">
-                    <p className="text-gray-500 text-sm md:text-lg font-medium">
+                    <p className="text-gray-500 text-base md:text-lg font-medium">
                       คุณชอบคนแบบไหน
                     </p>
-                    <p className="text-[#ff748e] font-semibold text-sm md:text-lg">
+                    <p className="text-[#ff748e] font-semibold text-base md:text-lg">
                       สเปคแบบไหนที่คุณถูกใจ
                     </p>
                   </div>
 
                   <div className="flex flex-col items-center justify-center text-center gap-1 md:gap-2 px-4 py-3 md:py-0">
-                    <p className="text-gray-500 text-sm md:text-lg font-medium">
+                    <p className="text-gray-500 text-base md:text-lg font-medium">
                       หาคำตอบพร้อมกันได้ที่นี่
                     </p>
-                    <p className="text-[#ff748e] font-semibold text-sm md:text-lg">
+                    <p className="text-[#ff748e] font-semibold text-base md:text-lg">
                       คำถามสั้น ๆ วัดใจคุณ
                     </p>
                   </div>
 
                   <div className="flex flex-col items-center justify-center text-center gap-1 md:gap-2 px-4 py-3 md:py-0">
-                    <p className="text-gray-500 text-sm md:text-lg font-medium">
+                    <p className="text-gray-500 text-base md:text-lg font-medium">
                       แชร์ให้โลกรู้ว่า
                     </p>
-                    <p className="text-[#ff748e] font-semibold text-sm md:text-lg">
+                    <p className="text-[#ff748e] font-semibold text-base md:text-lg">
                       คุณชอบคนแบบไหน
                     </p>
                   </div>
@@ -307,7 +331,7 @@ export default function Home() {
                   <span className="text-2xl md:text-3xl leading-none">›</span>
                 </motion.button>
 
-                <div className="flex items-center gap-2 mt-4 md:mt-5 text-gray-400 text-sm md:text-xl font-medium">
+                <div className="flex items-center gap-2 mt-4 md:mt-5 text-gray-400 text-base md:text-xl font-medium">
                   Presented By CupidBox
                 </div>
               </motion.div>
@@ -323,7 +347,7 @@ export default function Home() {
               transition={{ duration: 0.3 }}
               className="w-full flex flex-col items-center px-4"
             >
-              <div className="bg-white/90 backdrop-blur-sm px-5 py-2 rounded-full shadow-sm text-[#ff748e] font-bold text-base md:text-lg mb-4 border border-[#ffe0e8]">
+              <div className="bg-white/90 backdrop-blur-sm px-5 py-2 rounded-full shadow-sm text-[#ff748e] font-bold text-base md:text-base mb-4 border border-[#ffe0e8]">
                 ข้อที่ {currentQuestionIndex + 1} / {shuffledQuestions.length}
               </div>
 
@@ -351,34 +375,34 @@ export default function Home() {
                   <h2 className="text-xl md:text-2xl font-extrabold text-[#2C3E50] mb-1 text-center leading-tight tracking-wide">
                     ก่อนจะไปรู้ใจตัวเอง...
                   </h2>
-                  <h3 className="text-base md:text-lg text-[#ff748e] font-bold mb-6 text-center">
+                  <h3 className="text-base md:text-base text-[#ff748e] font-bold mb-6 text-center">
                     มีใครรอให้คุณบอกความในใจอยู่หรือเปล่า?
                   </h3>
 
                   <div className="w-full bg-white rounded-2xl p-5 shadow-sm border border-[#ffe0e8] mb-6 relative">
-                    <p className="text-gray-600 text-center text-sm md:text-base leading-relaxed font-medium mb-4">
+                    <p className="text-gray-600 text-center text-base md:text-base leading-relaxed font-medium mb-4">
                       ส่งต่อความรู้สึกผ่าน <br />
                       <strong className="text-[#ff748e] text-lg">เว็บไซต์ส่วนตัว</strong> ที่มีชิ้นเดียวในโลก<br />
                     </p>
 
                     <div className="bg-[#fff9fa] rounded-xl p-3 md:p-4 border border-[#ffe0e8] mb-5">
-                      <p className="text-center text-sm font-bold text-[#ff748e] mb-3">
+                      <p className="text-center text-base font-bold text-[#ff748e] mb-3">
                         ออกแบบความในใจได้ทุกโอกาส
                       </p>
 
                       <div className="flex flex-wrap justify-center gap-2 mb-3">
                         {['ง้อแฟน', 'วันครบรอบ', 'สารภาพรัก', 'การ์ดวันเกิด', 'รวบรวมข้อความให้ศิลปิน', 'สมุด Friendship', 'Customize Website'].map((tag, idx) => (
-                          <span key={idx} className="bg-white text-[#ff748e] text-[11px] md:text-xs font-bold px-3 py-1.5 rounded-lg border border-[#ffb6c1] shadow-sm">
+                          <span key={idx} className="bg-white text-[#ff748e] text-xs md:text-xs font-bold px-3 py-1.5 rounded-lg border border-[#ffb6c1] shadow-sm">
                             {tag}
                           </span>
                         ))}
                       </div>
 
                       <div className="text-center mt-3 border-t border-[#ffe0e8] pt-3">
-                        <p className="text-[10px] md:text-xs text-gray-600 font-medium leading-relaxed mb-1">
+                        <p className="text-xs md:text-xs text-gray-600 font-medium leading-relaxed mb-1">
                           เพื่อน แฟน ครอบครัว ศิลปินที่คุณชอบ และคนสำคัญในชีวิตคุณ สามารถส่งเป็นของขวัญให้ได้ทุกโอกาส ข้อมูลทั้งหมดจะเป็นความลับ
                         </p>
-                        <p className="text-[10px] md:text-xs text-[#ff748e] font-bold">
+                        <p className="text-xs md:text-xs text-[#ff748e] font-bold">
                           สามารถเลือกแบบที่คุณชอบได้เอง Customize เฉพาะคุณ
                         </p>
                       </div>
@@ -401,11 +425,15 @@ export default function Home() {
                         <img
                           src="/images/QRCode-line.png"
                           alt="Line QR Code"
+                          width={64}
+                          height={64}
+                          loading="lazy"
+                          decoding="async"
                           className="w-full h-full object-contain p-1"
                         />
                       </div>
 
-                      <div className="flex flex-col gap-2 flex-1 text-[11px] md:text-xs font-bold text-[#000000]">
+                      <div className="flex flex-col gap-2 flex-1 text-xs md:text-xs font-bold text-[#000000]">
                         <a href="https://lin.ee/WTXE1mZ" className="hover:text-[#DD2A7B] transition-colors">
                           Line Official: @840rxoyq  (มี @ ทุกครั้ง)
                         </a>
@@ -452,7 +480,7 @@ export default function Home() {
                     className="p-4 sm:p-6 w-full max-w-lg h-fit flex flex-col items-center bg-gradient-to-br from-[#ffe0e8] to-[#FFF0F5] rounded-[3rem] overflow-hidden"
                   >
                     <div className="bg-white rounded-[2.5rem] shadow-[0_0_0_4px_rgba(255,255,255,1),0_15px_30px_rgba(255,192,203,0.3)] p-5 md:p-6 w-full h-fit text-center overflow-hidden">
-                      <h2 className="text-xl md:text-2xl font-semibold text-slate-400 mb-2 tracking-wide">
+                      <h2 className="text-lg md:text-xl font-semibold text-slate-400 mb-2 tracking-wide">
                         สเปกที่คุณอาจไม่รู้ตัวคือ...
                       </h2>
 
@@ -486,6 +514,11 @@ export default function Home() {
                             src={top1.image}
                             crossOrigin="anonymous"
                             alt={top1.title}
+                            width={288}
+                            height={288}
+                            loading="eager"
+                            fetchPriority="high"
+                            decoding="async"
                             className="relative z-10 w-64 h-64 md:w-72 md:h-72 object-cover rounded-full drop-shadow-[0_15px_30px_rgba(0,0,0,0.15)]"
                           />
                         </div>
@@ -499,7 +532,7 @@ export default function Home() {
                         return (
                           <div className="w-full flex flex-col items-center gap-3">
                             <div className="bg-gradient-to-br from-[#fff9fa] to-[#FFF0F5] rounded-[2rem] p-4 text-center border-2 border-dashed border-[#FFC0CB] flex flex-col items-center gap-3 w-full">
-                              <p className="text-sm sm:text-base md:text-base text-[#2C3E50] whitespace-pre-line leading-7 sm:leading-8 font-medium px-2">
+                              <p className="text-sm sm:text-base md:text-lg text-[#2C3E50] whitespace-pre-line leading-7 sm:leading-8 font-medium px-2">
                                 {mainDesc}
                               </p>
                               {tags && (
@@ -514,7 +547,7 @@ export default function Home() {
                             {runnersUp.length > 0 && (
                               <div className="w-full mt-2 flex flex-col items-center">
                                 <hr className="w-full border-t border-gray-200 mb-3" />
-                                <h3 className="text-sm md:text-base text-gray-500 font-bold mb-3 text-center">
+                                <h3 className="text-base md:text-base text-gray-500 font-bold mb-3 text-center">
                                   สเปกที่โดนใจรองลงมา
                                 </h3>
 
@@ -526,6 +559,10 @@ export default function Home() {
                                           src={res.image}
                                           crossOrigin="anonymous"
                                           alt={res.title}
+                                          width={96}
+                                          height={96}
+                                          loading="eager"
+                                          decoding="async"
                                           className="w-20 h-20 md:w-24 md:h-24 object-cover rounded-full mb-2 drop-shadow-sm transition-transform hover:scale-105"
                                           onError={(e) => {
                                             e.currentTarget.style.display = 'none';
@@ -541,10 +578,10 @@ export default function Home() {
                                               d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
                                             />
                                           </svg>
-                                          <span className="text-[10px] md:text-xs font-medium">รูปตรงนี้</span>
+                                          <span className="text-xs md:text-xs font-medium">รูปตรงนี้</span>
                                         </div>
                                       )}
-                                      <span className="text-gray-700 font-bold text-xs md:text-sm text-center leading-tight">
+                                      <span className="text-gray-700 font-bold text-sm md:text-sm text-center leading-tight">
                                         {res.title}
                                       </span>
                                     </div>
@@ -558,6 +595,10 @@ export default function Home() {
                                 src="/images/cupidbox-logo.png"
                                 crossOrigin="anonymous"
                                 alt="Cupid Box"
+                                width={200}
+                                height={80}
+                                loading="eager"
+                                decoding="async"
                                 className="w-[120px] md:w-[200px] h-auto opacity-80 object-contain"
                               />
                             </div>
@@ -585,7 +626,8 @@ export default function Home() {
                     <button
                       onClick={saveImageAndShareIG}
                       disabled={isGenerating}
-                      className={`${isGenerating ? 'opacity-70 cursor-not-allowed' : ''} bg-gradient-to-r from-[#F58529] via-[#ff748e] to-[#8134AF] text-white font-bold py-3 md:py-4 rounded-2xl border-b-4 border-[#8134AF] active:border-b-0 active:translate-y-1 transition-all text-sm shadow-md`}
+                      type="button"
+                      className={`${isGenerating ? 'opacity-70 cursor-not-allowed' : ''} bg-gradient-to-r from-[#F58529] via-[#ff748e] to-[#8134AF] text-white font-bold py-3 md:py-4 rounded-2xl border-b-4 border-[#8134AF] active:border-b-0 active:translate-y-1 transition-all text-sm shadow-md touch-manipulation`}
                     >
                       {isGenerating ? 'กำลังโหลด...' : 'Save Image'}
                     </button>
@@ -608,7 +650,7 @@ export default function Home() {
                     >
                       <p className="text-white font-medium text-lg md:text-xl mb-6 text-center bg-black/40 px-6 py-2 rounded-full">
                         ดาวน์โหลดเรียบร้อย! <br />
-                        <span className="text-sm">(หากไม่พบรูป แตะค้างที่รูปเพื่อบันทึก)</span>
+                        <span className="text-base">(หากไม่พบรูป แตะค้างที่รูปเพื่อบันทึก)</span>
                       </p>
 
                       <img
