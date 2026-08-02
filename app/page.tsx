@@ -520,6 +520,14 @@ export default function Home() {
                             fetchPriority="high"
                             decoding="async"
                             className="relative z-10 w-64 h-64 md:w-72 md:h-72 object-cover rounded-full drop-shadow-[0_15px_30px_rgba(0,0,0,0.15)]"
+                            onError={(e) => {
+                              // Local image failed to load — almost always a path/case
+                              // mismatch between resultsData and the actual file in
+                              // /public/images. Logging the exact src makes it easy
+                              // to spot instead of the image just silently vanishing.
+                              console.error('Failed to load result image:', top1.id, top1.image);
+                              e.currentTarget.style.outline = '2px dashed red';
+                            }}
                           />
                         </div>
                       </div>
