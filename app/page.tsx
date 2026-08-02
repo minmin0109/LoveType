@@ -183,37 +183,34 @@ export default function Home() {
         })
       );
 
-      try {
-        await toJpeg(resultCardRef.current, { cacheBust: true, pixelRatio: 1, quality: 0.5 });
-      } catch (err) {
-        console.warn(err);
-      }
-
+      const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
       const dataUrl = await toJpeg(resultCardRef.current, {
         cacheBust: true,
-        pixelRatio: 3,
-        quality: 0.95,
+        pixelRatio,
+        quality: 0.9,
         backgroundColor: "#FFF0F5",
       });
 
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const fileName = `my-love-type-${Date.now()}.jpg`;
+      const link = document.createElement("a");
+      link.style.display = "none";
+      link.href = dataUrl;
+      link.download = fileName;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
 
       if (isMobile) {
         setShowImageModal(dataUrl);
-      } else {
-        const res = await fetch(dataUrl);
-        const blob = await res.blob();
-        const blobUrl = URL.createObjectURL(blob);
-  
-        const link = document.createElement("a");
-        link.download = `my-love-type-${Date.now()}.jpg`;
-        link.href = blobUrl;
-        
-        document.body.appendChild(link);
-        link.click();
-        
-        document.body.removeChild(link);
-        URL.revokeObjectURL(blobUrl);
+        try {
+          window.open(dataUrl, '_blank');
+        } catch (err) {
+          console.warn('mobile open fallback failed', err);
+        }
       }
 
     } catch (err) {
@@ -257,11 +254,11 @@ export default function Home() {
                 transition={{ type: 'spring', bounce: 0.5 }}
                 className="bg-white/95 backdrop-blur-sm rounded-[32px] md:rounded-[40px] shadow-[0_15px_40px_rgba(255,182,193,0.3)] max-w-4xl w-full px-6 pt-10 pb-6 md:pt-16 md:pb-8 relative z-10 flex flex-col items-center border border-[#fff0f3]"
               >
-                <h2 className="text-2xl sm:text-3xl md:text-5xl text-gray-700 font-bold mb-2 md:mb-4 tracking-wide text-center">
+                <h2 className="text-3xl sm:text-4xl md:text-5xl text-gray-700 font-bold mb-2 md:mb-4 tracking-wide text-center">
                   ลึก ๆ แล้ว...
                 </h2>
 
-                <h1 className="text-4xl sm:text-5xl md:text-6xl text-gray-700 font-bold mb-8 md:mb-10 tracking-wide text-center leading-tight">
+                <h1 className="text-5xl sm:text-6xl md:text-6xl text-gray-700 font-bold mb-8 md:mb-10 tracking-wide text-center leading-tight">
                   คุณแพ้คน <span className="text-[#ff748e]">Type</span> ไหน?
                 </h1>
 
@@ -326,7 +323,7 @@ export default function Home() {
               transition={{ duration: 0.3 }}
               className="w-full flex flex-col items-center px-4"
             >
-              <div className="bg-white/90 backdrop-blur-sm px-5 py-2 rounded-full shadow-sm text-[#ff748e] font-bold text-sm md:text-base mb-4 border border-[#ffe0e8]">
+              <div className="bg-white/90 backdrop-blur-sm px-5 py-2 rounded-full shadow-sm text-[#ff748e] font-bold text-base md:text-lg mb-4 border border-[#ffe0e8]">
                 ข้อที่ {currentQuestionIndex + 1} / {shuffledQuestions.length}
               </div>
 
@@ -354,7 +351,7 @@ export default function Home() {
                   <h2 className="text-xl md:text-2xl font-extrabold text-[#2C3E50] mb-1 text-center leading-tight tracking-wide">
                     ก่อนจะไปรู้ใจตัวเอง...
                   </h2>
-                  <h3 className="text-sm md:text-base text-[#ff748e] font-bold mb-6 text-center">
+                  <h3 className="text-base md:text-lg text-[#ff748e] font-bold mb-6 text-center">
                     มีใครรอให้คุณบอกความในใจอยู่หรือเปล่า?
                   </h3>
 
@@ -455,7 +452,7 @@ export default function Home() {
                     className="p-4 sm:p-6 w-full max-w-lg h-fit flex flex-col items-center bg-gradient-to-br from-[#ffe0e8] to-[#FFF0F5] rounded-[3rem] overflow-hidden"
                   >
                     <div className="bg-white rounded-[2.5rem] shadow-[0_0_0_4px_rgba(255,255,255,1),0_15px_30px_rgba(255,192,203,0.3)] p-5 md:p-6 w-full h-fit text-center overflow-hidden">
-                      <h2 className="text-lg md:text-xl font-semibold text-slate-400 mb-2 tracking-wide">
+                      <h2 className="text-xl md:text-2xl font-semibold text-slate-400 mb-2 tracking-wide">
                         สเปกที่คุณอาจไม่รู้ตัวคือ...
                       </h2>
 
@@ -502,7 +499,7 @@ export default function Home() {
                         return (
                           <div className="w-full flex flex-col items-center gap-3">
                             <div className="bg-gradient-to-br from-[#fff9fa] to-[#FFF0F5] rounded-[2rem] p-4 text-center border-2 border-dashed border-[#FFC0CB] flex flex-col items-center gap-3 w-full">
-                              <p className="text-xs sm:text-sm md:text-base text-[#2C3E50] whitespace-pre-line leading-7 sm:leading-8 font-medium px-2">
+                              <p className="text-sm sm:text-base md:text-base text-[#2C3E50] whitespace-pre-line leading-7 sm:leading-8 font-medium px-2">
                                 {mainDesc}
                               </p>
                               {tags && (
