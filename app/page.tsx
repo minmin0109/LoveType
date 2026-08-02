@@ -13,10 +13,10 @@ export interface CalculatedResult {
   title: string;
   description: string;
   image?: string;
+  glowColor?: string;  
   score: number;
   percentage: number;
 }
-
 const pageVariants = {
   initial: { opacity: 0, scale: 0.98, y: 10 },
   animate: { opacity: 1, scale: 1, y: 0 },

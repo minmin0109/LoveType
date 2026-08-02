@@ -1,9 +1,9 @@
- export interface QuizResult {
+export interface QuizResult {
   id: string;
   title: string;
   description: string;
-  glowColor?: string;  
-  image?: string; // เพิ่มฟิลด์ image แบบ optional
+  image?: string;
+  glowColor?: string;
 }
 
 export const resultsData: Record<string, QuizResult> = {
