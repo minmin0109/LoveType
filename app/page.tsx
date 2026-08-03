@@ -45,60 +45,6 @@ function detectIsMobile() {
   return isKnownMobileUA || isIpadOsDesktopMode || isTouchOnly;
 }
 
-/**
- * Fetches every <img> inside `container` and swaps its `src` for a base64
- * data URL *before* html-to-image tries to capture the DOM.
- *
- * Why this matters: html-to-image needs to re-fetch every image itself to
- * embed it into the exported canvas. If that internal fetch fails — most
- * commonly because the image is cross-origin and the server doesn't send
- * an `Access-Control-Allow-Origin` header — it silently falls back to
- * `imagePlaceholder` (a blank pixel), so the character art just vanishes
- * from the downloaded JPEG with no visible error.
- *
- * By inlining the images ourselves first, we (a) avoid that internal fetch
- * entirely, and (b) get a real, loggable error if an image genuinely can't
- * be loaded, instead of a silent blank space.
- *
- * Returns a map of img -> original src so the DOM can be restored after
- * the capture is done.
- */
-async function inlineImagesToBase64(
-  container: HTMLElement
-): Promise<Map<HTMLImageElement, string>> {
-  const imgs = Array.from(container.querySelectorAll('img'));
-  const originalSrcs = new Map<HTMLImageElement, string>();
-
-  await Promise.all(
-    imgs.map(async (img) => {
-      originalSrcs.set(img, img.src);
-
-      // Already a data URL — nothing to do.
-      if (img.src.startsWith('data:')) return;
-
-      try {
-        const res = await fetch(img.src, { cache: 'no-store' });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const blob = await res.blob();
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-        img.src = base64;
-      } catch (err) {
-        // This is the log to watch: it tells you exactly which image
-        // failed and why (CORS, 404, wrong path, etc.) instead of the
-        // image just quietly not showing up in the exported JPEG.
-        console.error('[saveImageAndShareIG] Failed to inline image:', img.src, err);
-      }
-    })
-  );
-
-  return originalSrcs;
-}
-
 export default function Home() {
   const [gameState, setGameState] = useState<'start' | 'playing' | 'promotion' | 'result'>('start');
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -232,19 +178,13 @@ export default function Home() {
 
     setIsGenerating(true);
 
-    // Tracks the original <img src> values so we can restore the live DOM
-    // after capture (we temporarily swap them to data URLs below).
-    let originalSrcs: Map<HTMLImageElement, string> | null = null;
-
     try {
       await document.fonts.ready;
 
       const images = Array.from(
-        resultCardRef.current.querySelectorAll('img')
+        resultCardRef.current.querySelectorAll("img")
       );
 
-      // Make sure every image has actually finished loading in the DOM
-      // before we try to read its pixels.
       await Promise.all(
         images.map(async (img) => {
           if (!img.complete) {
@@ -254,7 +194,7 @@ export default function Home() {
             });
           }
 
-          if ('decode' in img) {
+          if ("decode" in img) {
             try {
               await img.decode();
             } catch { }
@@ -262,21 +202,30 @@ export default function Home() {
         })
       );
 
-      // ✅ THE FIX: pre-fetch every image ourselves and swap the src to a
-      // base64 data URL. This avoids html-to-image's internal re-fetch,
-      // which is what silently drops images when they're cross-origin
-      // (no CORS headers) or otherwise fail to load a second time.
-      originalSrcs = await inlineImagesToBase64(resultCardRef.current);
+      const imgs = Array.from(resultCardRef.current!.querySelectorAll("img"));
+
+      for (const img of imgs) {
+        console.log({
+          src: img.src,
+          complete: img.complete,
+          naturalWidth: img.naturalWidth,
+          naturalHeight: img.naturalHeight,
+        });
+      }
 
       await new Promise((r) => requestAnimationFrame(r));
       await new Promise((r) => requestAnimationFrame(r));
 
       const dataUrl = await toJpeg(resultCardRef.current, {
-        cacheBust: false, // not needed anymore — sources are already data URLs
+        cacheBust: true,
         pixelRatio: 2,
         quality: 0.95,
-        backgroundColor: '#FFF0F5',
+        backgroundColor: "#FFF0F5",
+
         skipFonts: true,
+
+        imagePlaceholder:
+          "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WgLJ8cAAAAASUVORK5CYII=",
       });
 
       const response = await fetch(dataUrl);
@@ -286,12 +235,12 @@ export default function Home() {
         [blob],
         `my-love-type-${Date.now()}.jpg`,
         {
-          type: 'image/jpeg',
+          type: "image/jpeg",
         }
       );
 
       // ============================
-      // Mobile share (Android + iPhone)
+      // รองรับมือถือ (Android + iPhone)
       // ============================
       if (
         navigator.canShare &&
@@ -300,13 +249,13 @@ export default function Home() {
         try {
           await navigator.share({
             files: [file],
-            title: 'My Love Type',
-            text: 'แชร์ผลลัพธ์ของฉัน ❤️',
+            title: "My Love Type",
+            text: "แชร์ผลลัพธ์ของฉัน ❤️",
           });
 
           return;
         } catch (e) {
-          console.log('User cancelled share.');
+          console.log("User cancelled share.");
         }
       }
 
@@ -315,7 +264,7 @@ export default function Home() {
       // ============================
       const url = URL.createObjectURL(blob);
 
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
       a.download = file.name;
 
@@ -327,19 +276,11 @@ export default function Home() {
 
     } catch (err) {
       console.error(err);
-      alert('ไม่สามารถสร้างรูปภาพได้');
+      alert("ไม่สามารถสร้างรูปภาพได้");
     } finally {
-      // Restore the live DOM's <img src> values back to what they were —
-      // we only wanted the data URLs for the capture, not for the page.
-      if (originalSrcs) {
-        originalSrcs.forEach((src, img) => {
-          img.src = src;
-        });
-      }
       setIsGenerating(false);
     }
   }, [isGenerating]);
-
   const shareFacebook = () => {
     window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(websiteUrl)}`, '_blank');
   };
