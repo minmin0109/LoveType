@@ -186,26 +186,47 @@ export default function Home() {
     );
 
     await Promise.all(
-      images.map(
-        (img) =>
-          new Promise<void>((resolve) => {
-            if (img.complete) {
-              resolve();
-              return;
-            }
+  images.map(async (img) => {
+    if (!img.complete) {
+      await new Promise<void>((resolve) => {
+        img.onload = () => resolve();
+        img.onerror = () => resolve();
+      });
+    }
 
-            img.onload = () => resolve();
-            img.onerror = () => resolve();
-          })
-      )
-    );
+    if ("decode" in img) {
+      try {
+        await img.decode();
+      } catch {}
+    }
+  })
+);
 
-    const dataUrl = await toJpeg(resultCardRef.current, {
-      cacheBust: true,
-      pixelRatio: 2,
-      quality: 0.95,
-      backgroundColor: "#FFF0F5",
-    });
+const imgs = Array.from(resultCardRef.current!.querySelectorAll("img"));
+
+for (const img of imgs) {
+  console.log({
+    src: img.src,
+    complete: img.complete,
+    naturalWidth: img.naturalWidth,
+    naturalHeight: img.naturalHeight,
+  });
+}
+
+await new Promise((r) => requestAnimationFrame(r));
+await new Promise((r) => requestAnimationFrame(r));
+
+  const dataUrl = await toJpeg(resultCardRef.current, {
+  cacheBust: true,
+  pixelRatio: 2,
+  quality: 0.95,
+  backgroundColor: "#FFF0F5",
+
+  skipFonts: true,
+
+  imagePlaceholder:
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WgLJ8cAAAAASUVORK5CYII=",
+});
 
     const response = await fetch(dataUrl);
     const blob = await response.blob();
