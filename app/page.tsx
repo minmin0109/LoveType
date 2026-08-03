@@ -174,77 +174,92 @@ export default function Home() {
   };
 
   const saveImageAndShareIG = useCallback(async () => {
-    if (!resultCardRef.current) return;
+  if (!resultCardRef.current || isGenerating) return;
 
-    setIsGenerating(true);
+  setIsGenerating(true);
 
-    try {
-      await document.fonts.ready;
+  try {
+    await document.fonts.ready;
 
-      const images = Array.from(resultCardRef.current.querySelectorAll('img'));
+    const images = Array.from(
+      resultCardRef.current.querySelectorAll("img")
+    );
 
-      await Promise.all(
-        images.map((img) => {
-          return new Promise<void>((resolve) => {
-            if (!img.crossOrigin) {
-              img.crossOrigin = 'anonymous';
-            }
-            if (img.complete && img.naturalWidth > 0) {
+    await Promise.all(
+      images.map(
+        (img) =>
+          new Promise<void>((resolve) => {
+            if (img.complete) {
               resolve();
-            } else {
-              img.onload = () => resolve();
-              img.onerror = () => resolve();
+              return;
             }
-          });
-        })
-      );
 
-      // Single capture pass. The old code rendered twice (a throwaway
-      // low-quality pass "to warm up fonts/images" followed by the real
-      // pass) which roughly doubled generation time and, on slower mobile
-      // GPUs/canvases, was the main reason the button appeared to hang or
-      // silently fail. Waiting on document.fonts.ready + the image
-      // preloading above is enough on its own.
-      const dataUrl = await toJpeg(resultCardRef.current, {
-        cacheBust: true,
-        pixelRatio: 2, // was 3 — large canvases can silently fail on iOS Safari's canvas-size limits
-        quality: 0.92,
-        backgroundColor: '#FFF0F5',
-      });
+            img.onload = () => resolve();
+            img.onerror = () => resolve();
+          })
+      )
+    );
 
-      const isMobile = detectIsMobile();
+    const dataUrl = await toJpeg(resultCardRef.current, {
+      cacheBust: true,
+      pixelRatio: 2,
+      quality: 0.95,
+      backgroundColor: "#FFF0F5",
+    });
 
-      if (isMobile) {
-        // On mobile (especially iOS), programmatic <a download> clicks on
-        // blob URLs are unreliable — they often just open the image in a
-        // new tab instead of saving it, which looks like "nothing happens".
-        // Showing it in-page lets the user long-press to save instead.
-        setShowImageModal(dataUrl);
-      } else {
-        const res = await fetch(dataUrl);
-        const blob = await res.blob();
-        const blobUrl = URL.createObjectURL(blob);
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
 
-        const link = document.createElement('a');
-        link.download = `my-love-type-${Date.now()}.jpg`;
-        link.href = blobUrl;
-
-        document.body.appendChild(link);
-        link.click();
-
-        document.body.removeChild(link);
-        URL.revokeObjectURL(blobUrl);
+    const file = new File(
+      [blob],
+      `my-love-type-${Date.now()}.jpg`,
+      {
+        type: "image/jpeg",
       }
-    } catch (err) {
-      console.error(err);
-      // Fallback: if generation fails on a device we mis-detected as
-      // desktop, still let the user try again instead of leaving them stuck.
-      alert('ไม่สามารถบันทึกรูปภาพได้ กรุณาลองใหม่อีกครั้ง');
-    } finally {
-      setIsGenerating(false);
-    }
-  }, []);
+    );
 
+    // ============================
+    // รองรับมือถือ (Android + iPhone)
+    // ============================
+    if (
+      navigator.canShare &&
+      navigator.canShare({ files: [file] })
+    ) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: "My Love Type",
+          text: "แชร์ผลลัพธ์ของฉัน ❤️",
+        });
+
+        return;
+      } catch (e) {
+        console.log("User cancelled share.");
+      }
+    }
+
+    // ============================
+    // Desktop Download
+    // ============================
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = file.name;
+
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    URL.revokeObjectURL(url);
+
+  } catch (err) {
+    console.error(err);
+    alert("ไม่สามารถสร้างรูปภาพได้");
+  } finally {
+    setIsGenerating(false);
+  }
+}, [isGenerating]);
   const shareFacebook = () => {
     window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(websiteUrl)}`, '_blank');
   };
@@ -513,6 +528,7 @@ export default function Home() {
                           <img
                             src={top1.image}
                             crossOrigin="anonymous"
+                            referrerPolicy="no-referrer"
                             alt={top1.title}
                             width={288}
                             height={288}
